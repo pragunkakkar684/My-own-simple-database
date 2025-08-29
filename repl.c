@@ -38,12 +38,6 @@ typedef enum
     EXECUTE_TABLE_FULL
 } executeresult;
 
-typedef struct
-{
-    statementtype type;
-    row row_to_insert; // to be used only by insert statement
-} statement;
-
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 225
 
@@ -54,19 +48,27 @@ typedef struct
     char email[COLUMN_EMAIL_SIZE];
 } row;
 
-#define size_of_attribute(Struct, Attribute) sizeof(((Struct *)0)->Attribute) // a macro
-const uint32_t ID_SIZE = size_of_attribute(row, id);
-const uint32_t USERNAME_SIZE = size_of_attribute(row, username);
-const uint32_t EMAIL_SIZE = size_of_attribute(row, email);
-const uint32_t ID_OFFSET = 0;
-const uint32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
-const uint32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
-const uint32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
-const uint32_t PAGE_SIZE = 4096;
+typedef struct
+{
+    statementtype type;
+    row row_to_insert; // to be used only by insert statement
+} statement;
 
+#define size_of_attribute(Struct, Attribute) sizeof(((Struct *)0)->Attribute) // a macro
+
+#define ID_SIZE size_of_attribute(row, id)
+#define USERNAME_SIZE size_of_attribute(row, username)
+#define EMAIL_SIZE size_of_attribute(row, email)
+
+#define ID_OFFSET 0
+#define USERNAME_OFFSET (ID_OFFSET + ID_SIZE)
+#define EMAIL_OFFSET (USERNAME_OFFSET + USERNAME_SIZE)
+#define ROW_SIZE (ID_SIZE + USERNAME_SIZE + EMAIL_SIZE)
+
+#define PAGE_SIZE 4096
 #define TABLE_MAX_PAGES 100
-const uint32_t ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
-const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
+#define ROWS_PER_PAGE (PAGE_SIZE / ROW_SIZE)
+#define TABLE_MAX_ROWS (ROWS_PER_PAGE * TABLE_MAX_PAGES)
 
 typedef struct
 {
@@ -99,7 +101,7 @@ void *row_slot(table *table, uint32_t row_num)
     void *page = table->pages[page_num];
     if (page == NULL)
     {
-        // memory should be allcoated when we try ti accesspage
+        // memory should be allocated when we try to access page
         page = table->pages[page_num] = malloc(PAGE_SIZE);
     }
     uint32_t row_offset = row_num % ROWS_PER_PAGE;
@@ -148,7 +150,7 @@ void read_input(inputbuffer *input_buffer)
         exit(EXIT_FAILURE);
     }
 
-    // ignore traling newline
+    // ignore trailing newline
     input_buffer->input_length = bytes_read - 1; // this excludes newline from getting stored
     input_buffer->buffer[bytes_read - 1] = 0;    // replaces newline with \0
 }
