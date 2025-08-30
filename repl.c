@@ -89,6 +89,13 @@ typedef struct
     pager *pager;
 } table;
 
+typedef struct
+{
+    table *table;
+    uint32_t row_num;
+    bool end_of_table; // Indicates a position one past the last element
+} cursor;
+
 void print_row(row *row)
 {
     printf("(%d, %s, %s)\n", row->id, row->username, row->email);
@@ -111,11 +118,8 @@ void deserialize_row(void *source, row *destination)
 pager *pager_open(const char *filename)
 {
     int fd = open(filename,
-                  O_RDWR |     // Read/Write mode
-                      O_CREAT, // Create file if it does not exist
-                  S_IWUSR |    // User write permission
-                      S_IRUSR  // User read permission
-    );
+                  O_RDWR | O_CREAT,
+                  S_IWUSR | S_IRUSR);
 
     if (fd == -1)
     {
@@ -148,11 +152,8 @@ void *get_page(pager *pager, uint32_t page_num)
 
     if (pager->pages[page_num] == NULL)
     {
-        // Cache miss. Allocate memory and load from file.
         void *page = malloc(PAGE_SIZE);
         uint32_t num_pages = pager->file_length / PAGE_SIZE;
-
-        // We might save a partial page at the end of the file
         if (pager->file_length % PAGE_SIZE)
         {
             num_pages += 1;
@@ -175,13 +176,41 @@ void *get_page(pager *pager, uint32_t page_num)
     return pager->pages[page_num];
 }
 
-void *row_slot(table *table, uint32_t row_num)
+cursor *table_start(table *table)
 {
+    cursor *c = malloc(sizeof(cursor));
+    c->table = table;
+    c->row_num = 0;
+    c->end_of_table = (table->num_rows == 0);
+    return c;
+}
+
+cursor *table_end(table *table)
+{
+    cursor *c = malloc(sizeof(cursor));
+    c->table = table;
+    c->row_num = table->num_rows;
+    c->end_of_table = true;
+    return c;
+}
+
+void *cursor_value(cursor *c)
+{
+    uint32_t row_num = c->row_num;
     uint32_t page_num = row_num / ROWS_PER_PAGE;
-    void *page = get_page(table->pager, page_num);
+    void *page = get_page(c->table->pager, page_num);
     uint32_t row_offset = row_num % ROWS_PER_PAGE;
     uint32_t byte_offset = row_offset * ROW_SIZE;
     return page + byte_offset;
+}
+
+void cursor_advance(cursor *c)
+{
+    c->row_num += 1;
+    if (c->row_num >= c->table->num_rows)
+    {
+        c->end_of_table = true;
+    }
 }
 
 table *db_open(const char *filename)
@@ -190,7 +219,6 @@ table *db_open(const char *filename)
     uint32_t num_rows = pager->file_length / ROW_SIZE;
 
     table *table = malloc(sizeof(table));
-
     table->pager = pager;
     table->num_rows = num_rows;
 
@@ -214,8 +242,7 @@ void pager_flush(pager *pager, uint32_t page_num, uint32_t size)
         exit(EXIT_FAILURE);
     }
 
-    off_t offset = lseek(pager->file_descriptor, page_num * PAGE_SIZE,
-                         SEEK_SET);
+    off_t offset = lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
 
     if (offset == -1)
     {
@@ -223,8 +250,7 @@ void pager_flush(pager *pager, uint32_t page_num, uint32_t size)
         exit(EXIT_FAILURE);
     }
 
-    ssize_t bytes_written = write(
-        pager->file_descriptor, pager->pages[page_num], size);
+    ssize_t bytes_written = write(pager->file_descriptor, pager->pages[page_num], size);
 
     if (bytes_written == -1)
     {
@@ -249,8 +275,6 @@ void db_close(table *table)
         pager->pages[i] = NULL;
     }
 
-    // There may be a partial page to write to the end of the file
-    // This should not be needed after we switch to a B-tree
     uint32_t num_additional_rows = table->num_rows % ROWS_PER_PAGE;
     if (num_additional_rows > 0)
     {
@@ -368,12 +392,18 @@ prepareresult prepare_statement(inputbuffer *input_buffer, statement *statement)
 
 executeresult execute_select(statement *statement, table *table)
 {
+    cursor *c = table_start(table);
+
     row row;
-    for (uint32_t i = 0; i < table->num_rows; i++)
+    while (!(c->end_of_table))
     {
-        deserialize_row(row_slot(table, i), &row);
+        deserialize_row(cursor_value(c), &row);
         print_row(&row);
+        cursor_advance(c);
     }
+
+    free(c);
+
     return EXECUTE_SUCCESS;
 }
 
@@ -385,8 +415,13 @@ executeresult execute_insert(statement *statement, table *table)
     }
 
     row *row_to_insert = &(statement->row_to_insert);
-    serialize_row(row_to_insert, row_slot(table, table->num_rows));
+    cursor *c = table_end(table);
+
+    serialize_row(row_to_insert, cursor_value(c));
     table->num_rows += 1;
+
+    free(c);
+
     return EXECUTE_SUCCESS;
 }
 
