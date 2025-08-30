@@ -1,9 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
-# this is the github i used for this project add this as well "https://github.com/codecrafters-io/build-your-own-x"
-
-Here is your updated README, now including an acknowledgment of the GitHub repository used as inspiration and reference for your project:[^1]
-
 # My Own Simple Database
 
 > "What I cannot create, I do not understand." – Richard Feynman
