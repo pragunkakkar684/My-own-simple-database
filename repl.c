@@ -97,8 +97,8 @@ void print_row(row *row)
 void serialize_row(row *source, void *destination)
 {
     memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
-    memcpy(destination + USERNAME_OFFSET, &(source->username), USERNAME_SIZE);
-    memcpy(destination + EMAIL_OFFSET, &(source->email), EMAIL_SIZE);
+    strncpy(destination + USERNAME_OFFSET, source->username, USERNAME_SIZE);
+    strncpy(destination + EMAIL_OFFSET, source->email, EMAIL_SIZE);
 }
 
 void deserialize_row(void *source, row *destination)
@@ -283,7 +283,11 @@ void db_close(table *table)
     free(table);
 }
 
-void print_prompt() { printf("Sup boy>"); }
+void print_prompt()
+{
+    printf("Sup boy>");
+    fflush(stdout);
+}
 
 void read_input(inputbuffer *input_buffer)
 {
